@@ -12,6 +12,9 @@ uv sync
 uv run context7-local
 ```
 
+> [!TIP]
+> **Windows Users**: See the [Windows Deployment Guide](docs/deploy_windows.md) for platform-specific setup instructions.
+
 ## Cline Configuration
 
 Add to your `cline_mcp_settings.json`:
