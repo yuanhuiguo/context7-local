@@ -192,3 +192,22 @@ def _decode_content(data: dict[str, str]) -> str:
     if encoding == "base64":
         return base64.b64decode(content).decode("utf-8", errors="replace")
     return content
+
+
+async def fetch_homepage_url(owner: str, repo: str) -> str | None:
+    """Return the 'homepage' field from a GitHub repo's metadata.
+
+    Many libraries declare their official documentation URL here
+    (e.g. FastAPI declares https://fastapi.tiangolo.com).
+    Returns None if the field is empty or the request fails.
+    """
+    async with _make_client() as client:
+        resp = await _request_with_retry(client, "GET", f"/repos/{owner}/{repo}")
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+        homepage = data.get("homepage", "")
+        if homepage and isinstance(homepage, str) and homepage.startswith("http"):
+            return homepage
+        return None

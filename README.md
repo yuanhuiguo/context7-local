@@ -1,6 +1,6 @@
 # context7-local
 
-A locally running MCP server providing **Context7-compatible** `resolve-library-id` and `query-docs` tools. Fetches open-source library documentation from GitHub, caches it locally, and serves it to LLM clients (like Cline) over stdio.
+A locally running MCP server providing **Context7-compatible** `resolve-library-id` and `query-docs` tools. Fetches open-source library documentation from GitHub **and official documentation websites**, caches it locally, and serves it to LLM clients (like Cline) over stdio.
 
 ## Quick Start
 
@@ -48,13 +48,19 @@ Search GitHub for a library by name. Returns top 5 matches with library IDs, des
 
 ### `query-docs`
 
-Fetch and search documentation for a library. Caches README + `/docs` Markdown files locally, splits into chunks, and ranks by TF-IDF relevance to your query.
+Fetch and search documentation for a library. Uses a 3-stage pipeline:
+
+1. **README** — fetches the repository README
+2. **`/docs` directory** — walks the docs tree for Markdown files
+3. **Official website** — scrapes the library's documentation site (e.g. `fastapi.tiangolo.com`)
+
+All content is cached locally, split into chunks by heading, and ranked by TF-IDF relevance to your query.
 
 ## Development
 
 ```bash
 # Run tests
-uv run pytest
+uv run pytest  # 47 tests
 
 # Format & lint
 uv run ruff format .

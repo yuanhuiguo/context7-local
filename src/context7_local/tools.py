@@ -12,7 +12,7 @@ from collections import Counter
 
 import httpx
 
-from context7_local import cache, chunker, github_client
+from context7_local import cache, chunker, github_client, scraper
 from context7_local.server import mcp
 
 log = logging.getLogger("context7-local")
@@ -116,12 +116,12 @@ async def query_docs(library_id: str, query: str) -> str:
 
 
 async def _fetch_and_cache(owner: str, repo: str) -> None:
-    """Fetch README + docs/ directory from GitHub and persist to cache.
+    """Fetch README + docs/ directory + official website and persist to cache.
 
     Network errors are caught per-stage so a partial fetch (e.g. README
     succeeds but /docs times out) still caches whatever was retrieved.
     """
-    # README
+    # Stage 1: README
     try:
         readme = await github_client.fetch_readme(owner, repo)
         if readme:
@@ -129,7 +129,7 @@ async def _fetch_and_cache(owner: str, repo: str) -> None:
     except (httpx.HTTPError, OSError) as exc:
         log.warning("Failed to fetch README for %s/%s: %s", owner, repo, exc)
 
-    # docs/ directory tree
+    # Stage 2: docs/ directory tree
     try:
         doc_files = await github_client.list_docs_directory(owner, repo, path="docs")
         for entry in doc_files:
@@ -141,7 +141,47 @@ async def _fetch_and_cache(owner: str, repo: str) -> None:
     except (httpx.HTTPError, OSError) as exc:
         log.warning("Failed to list docs/ for %s/%s: %s", owner, repo, exc)
 
+    # Stage 3: Official documentation website
+    try:
+        homepage = await github_client.fetch_homepage_url(owner, repo)
+        if homepage and _is_docs_url(homepage):
+            scraped = await scraper.scrape_docs_site(homepage)
+            for path, content in scraped.items():
+                cache.save_doc(owner, repo, f"web/{path}", content)
+    except (httpx.HTTPError, OSError) as exc:
+        log.warning("Failed to scrape website for %s/%s: %s", owner, repo, exc)
+
     cache.mark_fetched(owner, repo)
+
+
+# ---------------------------------------------------------------------------
+# Internal: URL filtering for website scraping
+# ---------------------------------------------------------------------------
+
+_SKIP_DOMAINS = {
+    "github.com",
+    "gitlab.com",
+    "npmjs.com",
+    "www.npmjs.com",
+    "pypi.org",
+    "rubygems.org",
+    "crates.io",
+    "pkg.go.dev",
+    "hub.docker.com",
+}
+
+
+def _is_docs_url(url: str) -> bool:
+    """Return True if the URL looks like a documentation site worth scraping.
+
+    Filters out package registries and source code hosting that we already
+    handle via the GitHub API.
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    domain = parsed.netloc.lower()
+    return bool(domain) and domain not in _SKIP_DOMAINS
 
 
 # ---------------------------------------------------------------------------

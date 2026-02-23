@@ -93,3 +93,64 @@ class TestRankChunks:
         ]
         ranked = _rank_chunks("", chunks, top_k=5)
         assert len(ranked) == 1
+
+
+class TestFetchAndCacheWithScraper:
+    """Test the website-augmented fetch pipeline."""
+
+    @pytest.mark.asyncio
+    async def test_scrapes_homepage_when_available(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+
+        with (
+            patch.object(
+                github_client,
+                "fetch_readme",
+                new_callable=AsyncMock,
+                return_value="# README\nHello",
+            ),
+            patch.object(
+                github_client, "list_docs_directory", new_callable=AsyncMock, return_value=[]
+            ),
+            patch.object(
+                github_client,
+                "fetch_homepage_url",
+                new_callable=AsyncMock,
+                return_value="https://docs.example.com",
+            ),
+            patch(
+                "context7_local.scraper.scrape_docs_site",
+                new_callable=AsyncMock,
+                return_value={"index.md": "# Welcome\nScraped content"},
+            ),
+        ):
+            result = await query_docs("/owner/repo", "welcome")
+            assert "Welcome" in result or "Scraped content" in result
+
+    @pytest.mark.asyncio
+    async def test_skips_github_homepage(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+
+        with (
+            patch.object(
+                github_client,
+                "fetch_readme",
+                new_callable=AsyncMock,
+                return_value="# README\nHello",
+            ),
+            patch.object(
+                github_client, "list_docs_directory", new_callable=AsyncMock, return_value=[]
+            ),
+            patch.object(
+                github_client,
+                "fetch_homepage_url",
+                new_callable=AsyncMock,
+                return_value="https://github.com/owner/repo",
+            ),
+            patch(
+                "context7_local.scraper.scrape_docs_site",
+                new_callable=AsyncMock,
+            ) as mock_scrape,
+        ):
+            await query_docs("/owner/repo", "hello")
+            mock_scrape.assert_not_called()

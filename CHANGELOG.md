@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- Website documentation scraper (`scraper.py`) — async BFS crawler with HTML→Markdown conversion using BeautifulSoup + lxml
+- `fetch_homepage_url()` in `github_client.py` — extracts official docs URL from GitHub repo metadata
+- `_is_docs_url()` filter in `tools.py` — prevents scraping of package registries and source code hosts
+- 3-stage documentation fetching pipeline: README → `/docs` → official website
+- Scraped content cached under `web/` namespace (e.g. `web/index.md`, `web/tutorial.md`)
+- 25 new unit tests for scraper module, 2 new integration tests for website-augmented fetch (47 total)
+
+### Changed
+
+- `_MAX_PAGE_CHARS` limit increased from 50KB to 200KB to accommodate large splash pages (e.g. FastAPI)
+
+### Dependencies
+
+- Added `beautifulsoup4>=4.12,<5` — HTML parsing and text extraction
+- Added `lxml>=5.0,<6` — fast HTML parser backend
+
 ## [0.1.0] - 2026-02-23
 
 ### Added
