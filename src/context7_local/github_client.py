@@ -13,6 +13,7 @@ import base64
 import logging
 import os
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -65,7 +66,7 @@ async def _request_with_retry(
     client: httpx.AsyncClient,
     method: str,
     url: str,
-    **kwargs: object,
+    **kwargs: Any,
 ) -> httpx.Response:
     """Execute an HTTP request with automatic retry on transient errors.
 

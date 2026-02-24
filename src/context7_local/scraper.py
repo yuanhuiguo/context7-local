@@ -125,7 +125,8 @@ def _detect_lang(el: Tag | str) -> str:
     """Try to extract language hint from a code/pre element's class."""
     if isinstance(el, str):
         return ""
-    classes = el.get("class", [])
+    # Tag.get("class") returns list[str] | str | None
+    classes = el.get("class")
     if isinstance(classes, list):
         for cls in classes:
             if isinstance(cls, str) and cls.startswith("language-"):

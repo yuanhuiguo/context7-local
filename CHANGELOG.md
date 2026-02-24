@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - `tools.py` — `query-docs` completely replaced TF-IDF string matching ranking with Numpy matrix multiplication (`doc_matrix @ q_vec`) representing cosine similarity
+- `tools.py` — `_rank_chunks_semantic` converted to `async def`; synchronous ONNX inference (`embed_texts`, `embed_query`) offloaded to thread pool via `asyncio.to_thread` to prevent event loop blocking
+- `cache.py` — `load_embeddings` now logs `WARNING` with full traceback on `OSError`/`ValueError` instead of silently swallowing exceptions
+- `github_client.py` — `_request_with_retry` kwargs type annotation changed from `object` to `Any` (Mypy strict compliance)
+- `scraper.py` — `_detect_lang` safely handles `Tag.get("class")` returning `None` (Mypy strict compliance)
 - `chunker.py` — `Chunk` dataclass extended to hold optional `embedding` L2-normalized `numpy.ndarray`
 - Ranking limit enforced via stable argsort descending
 
@@ -24,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Added `fastembed>=0.4.0,<1` — Local embedding generation without external APIs
 - Added `numpy>=2.0,<3` — In-memory L2 vector cosine similarity computations
+- Added `mypy>=1.19.1` — Static type checking (dev dependency)
 
 ### Added (Previous)
 

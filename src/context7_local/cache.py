@@ -12,11 +12,14 @@ Cache layout:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from pathlib import Path
 
 import numpy as np
+
+log = logging.getLogger("context7-local")
 
 _DEFAULT_CACHE_DIR = Path.home() / ".cache" / "context7-local"
 _DEFAULT_TTL_HOURS = 7 * 24  # 7 days
@@ -128,4 +131,5 @@ def load_embeddings(
         chunk_ids: list[str] = json.loads(ids_path.read_text(encoding="utf-8"))
         return chunk_ids, matrix
     except (OSError, ValueError):
+        log.warning("Failed to load embedding cache for %s/%s", owner, repo, exc_info=True)
         return None

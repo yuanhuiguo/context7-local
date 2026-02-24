@@ -5,6 +5,7 @@ Uses FastEmbed + Numpy for semantic vector ranking of document chunks.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import httpx
@@ -100,7 +101,7 @@ async def query_docs(library_id: str, query: str) -> str:
         return f"Documentation for {library_id} could not be chunked."
 
     # --- Semantic ranking ---
-    ranked = _rank_chunks_semantic(query, owner, repo, all_chunks, top_k=5)
+    ranked = await _rank_chunks_semantic(query, owner, repo, all_chunks, top_k=5)
 
     # Format output
     sections: list[str] = []
@@ -193,7 +194,7 @@ def _chunk_id(chunk: chunker.Chunk) -> str:
     return f"{chunk.source}::{chunk.title}"
 
 
-def _rank_chunks_semantic(
+async def _rank_chunks_semantic(
     query: str,
     owner: str,
     repo: str,
@@ -228,12 +229,12 @@ def _rank_chunks_semantic(
     if cached is None:
         log.info("Generating embeddings for %d chunks (%s/%s)…", len(chunks), owner, repo)
         texts = [f"{c.title}\n{c.content}" for c in chunks]
-        doc_matrix = embedder.embed_texts(texts)  # (N, D) float32, L2-normalised
+        doc_matrix = await asyncio.to_thread(embedder.embed_texts, texts)  # (N, D) float32
         cache.save_embeddings(owner, repo, current_ids, doc_matrix)
         log.info("Embeddings persisted for %s/%s.", owner, repo)
 
     # Embed the query and compute cosine similarities via dot product
-    q_vec = embedder.embed_query(query)  # (D,) unit vector
+    q_vec = await asyncio.to_thread(embedder.embed_query, query)  # (D,) unit vector
     scores: np.ndarray = doc_matrix @ q_vec  # (N,) cosine similarities
 
     # Pick top-k indices (stable argsort descending)

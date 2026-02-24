@@ -79,6 +79,7 @@ class TestDetectLang:
 
         soup = BeautifulSoup('<code class="language-javascript">x</code>', "lxml")
         code = soup.find("code")
+        assert code is not None
         assert _detect_lang(code) == "javascript"
 
     def test_without_class(self) -> None:
@@ -86,6 +87,7 @@ class TestDetectLang:
 
         soup = BeautifulSoup("<code>x</code>", "lxml")
         code = soup.find("code")
+        assert code is not None
         assert _detect_lang(code) == ""
 
     def test_string_input(self) -> None:

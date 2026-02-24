@@ -61,7 +61,7 @@ All content is cached locally, split into chunks by heading, and ranked by **Sem
 
 ```bash
 # Run tests
-uv run pytest  # 47 tests
+uv run pytest  # 50 tests
 
 # Format & lint
 uv run ruff format .

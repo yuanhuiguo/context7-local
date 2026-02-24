@@ -78,27 +78,30 @@ class TestQueryDocs:
 class TestRankChunksSemantic:
     """Tests for the numpy-based semantic ranking function."""
 
-    def test_returns_top_k_chunks(self, tmp_path, monkeypatch) -> None:
+    @pytest.mark.asyncio
+    async def test_returns_top_k_chunks(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("CACHE_DIR", str(tmp_path))
         chunks = [
             chunker.Chunk(title="Install", content="pip install foo bar", source="a.md"),
             chunker.Chunk(title="Unrelated", content="nothing relevant here", source="b.md"),
             chunker.Chunk(title="Setup", content="install setup guide step", source="c.md"),
         ]
-        ranked = _rank_chunks_semantic("install setup", "owner", "repo", chunks, top_k=2)
+        ranked = await _rank_chunks_semantic("install setup", "owner", "repo", chunks, top_k=2)
         # Should return exactly top_k results (or fewer if chunks < top_k)
         assert len(ranked) == 2
         # All returned chunks must be valid Chunk objects from the original list
         for chunk in ranked:
             assert chunk in chunks
 
-    def test_top_k_exceeds_chunks(self, tmp_path, monkeypatch) -> None:
+    @pytest.mark.asyncio
+    async def test_top_k_exceeds_chunks(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("CACHE_DIR", str(tmp_path))
         chunks = [chunker.Chunk(title="A", content="content", source="a.md")]
-        ranked = _rank_chunks_semantic("query", "owner", "repo", chunks, top_k=10)
+        ranked = await _rank_chunks_semantic("query", "owner", "repo", chunks, top_k=10)
         assert len(ranked) == 1
 
-    def test_embedding_cache_hit(self, tmp_path, monkeypatch) -> None:
+    @pytest.mark.asyncio
+    async def test_embedding_cache_hit(self, tmp_path, monkeypatch) -> None:
         """Second call with same chunks uses persisted .npy without re-embedding."""
         import numpy as np
 
@@ -106,7 +109,7 @@ class TestRankChunksSemantic:
         chunks = [chunker.Chunk(title="A", content="content", source="a.md")]
 
         # First call — populates cache
-        _rank_chunks_semantic("q1", "owner", "repo", chunks, top_k=1)
+        await _rank_chunks_semantic("q1", "owner", "repo", chunks, top_k=1)
 
         # Replace embed_texts with a sentinel that should NOT be called on cache hit
         call_count = {"n": 0}
@@ -117,12 +120,13 @@ class TestRankChunksSemantic:
 
         monkeypatch.setattr(embedder, "embed_texts", counting_embed)
 
-        _rank_chunks_semantic("q2", "owner", "repo", chunks, top_k=1)
+        await _rank_chunks_semantic("q2", "owner", "repo", chunks, top_k=1)
         assert call_count["n"] == 0, "embed_texts should not be called on cache hit"
 
-    def test_empty_chunks_returns_empty(self, tmp_path, monkeypatch) -> None:
+    @pytest.mark.asyncio
+    async def test_empty_chunks_returns_empty(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("CACHE_DIR", str(tmp_path))
-        result = _rank_chunks_semantic("anything", "owner", "repo", [], top_k=5)
+        result = await _rank_chunks_semantic("anything", "owner", "repo", [], top_k=5)
         assert result == []
 
     def test_chunk_id_format(self) -> None:
