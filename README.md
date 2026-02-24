@@ -39,6 +39,7 @@ Add to your `cline_mcp_settings.json`:
 | `GITHUB_TIMEOUT` | `30` | HTTP request timeout in seconds |
 | `CACHE_DIR` | `~/.cache/context7-local/` | Documentation cache directory |
 | `CACHE_TTL_HOURS` | `168` (7 days) | Cache expiry in hours |
+| `EMBED_MODEL` | `BAAI/bge-small-en-v1.5` | FastEmbed ONNX model used for semantic search |
 
 ## Tools
 
@@ -54,7 +55,7 @@ Fetch and search documentation for a library. Uses a 3-stage pipeline:
 2. **`/docs` directory** — walks the docs tree for Markdown files
 3. **Official website** — scrapes the library's documentation site (e.g. `fastapi.tiangolo.com`)
 
-All content is cached locally, split into chunks by heading, and ranked by TF-IDF relevance to your query.
+All content is cached locally, split into chunks by heading, and ranked by **Semantic Vector Search** (using `FastEmbed` + Numpy cosine similarity) for high-relevance retrieval.
 
 ## Development
 

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
 
 _MAX_CHUNK_CHARS = 2000
 
@@ -14,6 +18,7 @@ class Chunk:
     title: str
     content: str
     source: str  # file path or identifier
+    embedding: np.ndarray | None = field(default=None, compare=False, hash=False)
 
 
 def chunk_markdown(text: str, source: str = "") -> list[Chunk]:

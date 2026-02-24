@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from context7_local import cache, chunker, github_client
-from context7_local.tools import _rank_chunks, query_docs, resolve_library_id
+from context7_local import cache, chunker, embedder, github_client
+from context7_local.tools import _chunk_id, _rank_chunks_semantic, query_docs, resolve_library_id
 
 
 class TestResolveLibraryId:
@@ -75,24 +75,59 @@ class TestQueryDocs:
             assert "Hello" in result
 
 
-class TestRankChunks:
-    def test_ranks_by_relevance(self) -> None:
+class TestRankChunksSemantic:
+    """Tests for the numpy-based semantic ranking function."""
+
+    def test_returns_top_k_chunks(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("CACHE_DIR", str(tmp_path))
         chunks = [
             chunker.Chunk(title="Install", content="pip install foo bar", source="a.md"),
-            chunker.Chunk(title="Unrelated", content="nothing here about install", source="b.md"),
-            chunker.Chunk(title="Setup", content="install install install setup", source="c.md"),
+            chunker.Chunk(title="Unrelated", content="nothing relevant here", source="b.md"),
+            chunker.Chunk(title="Setup", content="install setup guide step", source="c.md"),
         ]
-        ranked = _rank_chunks("install", chunks, top_k=2)
+        ranked = _rank_chunks_semantic("install setup", "owner", "repo", chunks, top_k=2)
+        # Should return exactly top_k results (or fewer if chunks < top_k)
         assert len(ranked) == 2
-        # The chunk with more "install" mentions should rank higher
-        assert ranked[0].title == "Setup"
+        # All returned chunks must be valid Chunk objects from the original list
+        for chunk in ranked:
+            assert chunk in chunks
 
-    def test_empty_query(self) -> None:
-        chunks = [
-            chunker.Chunk(title="A", content="Content", source="a.md"),
-        ]
-        ranked = _rank_chunks("", chunks, top_k=5)
+    def test_top_k_exceeds_chunks(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+        chunks = [chunker.Chunk(title="A", content="content", source="a.md")]
+        ranked = _rank_chunks_semantic("query", "owner", "repo", chunks, top_k=10)
         assert len(ranked) == 1
+
+    def test_embedding_cache_hit(self, tmp_path, monkeypatch) -> None:
+        """Second call with same chunks uses persisted .npy without re-embedding."""
+        import numpy as np
+
+        monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+        chunks = [chunker.Chunk(title="A", content="content", source="a.md")]
+
+        # First call — populates cache
+        _rank_chunks_semantic("q1", "owner", "repo", chunks, top_k=1)
+
+        # Replace embed_texts with a sentinel that should NOT be called on cache hit
+        call_count = {"n": 0}
+
+        def counting_embed(texts):
+            call_count["n"] += 1
+            return np.zeros((len(texts), 4), dtype=np.float32)
+
+        monkeypatch.setattr(embedder, "embed_texts", counting_embed)
+
+        _rank_chunks_semantic("q2", "owner", "repo", chunks, top_k=1)
+        assert call_count["n"] == 0, "embed_texts should not be called on cache hit"
+
+    def test_empty_chunks_returns_empty(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("CACHE_DIR", str(tmp_path))
+        result = _rank_chunks_semantic("anything", "owner", "repo", [], top_k=5)
+        assert result == []
+
+    def test_chunk_id_format(self) -> None:
+        chunk = chunker.Chunk(title="My Title", content="content", source="readme.md")
+        assert _chunk_id(chunk) == "readme.md::My Title"
 
 
 class TestFetchAndCacheWithScraper:

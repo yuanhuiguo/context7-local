@@ -1,18 +1,16 @@
 """MCP tool implementations: resolve-library-id and query-docs.
 
-Uses a lightweight TF-IDF scorer for document chunk ranking.
+Uses FastEmbed + Numpy for semantic vector ranking of document chunks.
 """
 
 from __future__ import annotations
 
 import logging
-import math
-import re
-from collections import Counter
 
 import httpx
+import numpy as np
 
-from context7_local import cache, chunker, github_client, scraper
+from context7_local import cache, chunker, embedder, github_client, scraper
 from context7_local.server import mcp
 
 log = logging.getLogger("context7-local")
@@ -93,7 +91,7 @@ async def query_docs(library_id: str, query: str) -> str:
     if not docs:
         return f"No documentation found for {library_id}."
 
-    # Chunk and rank
+    # Chunk all cached markdown
     all_chunks: list[chunker.Chunk] = []
     for path, content in docs.items():
         all_chunks.extend(chunker.chunk_markdown(content, source=path))
@@ -101,7 +99,8 @@ async def query_docs(library_id: str, query: str) -> str:
     if not all_chunks:
         return f"Documentation for {library_id} could not be chunked."
 
-    ranked = _rank_chunks(query, all_chunks, top_k=5)
+    # --- Semantic ranking ---
+    ranked = _rank_chunks_semantic(query, owner, repo, all_chunks, top_k=5)
 
     # Format output
     sections: list[str] = []
@@ -185,45 +184,60 @@ def _is_docs_url(url: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Internal: lightweight TF-IDF ranking
+# Internal: semantic ranking (FastEmbed + Numpy)
 # ---------------------------------------------------------------------------
 
-_WORD_RE = re.compile(r"[a-zA-Z0-9_]+")
+
+def _chunk_id(chunk: chunker.Chunk) -> str:
+    """Stable string identifier for a chunk used as matrix row index."""
+    return f"{chunk.source}::{chunk.title}"
 
 
-def _tokenize(text: str) -> list[str]:
-    return [w.lower() for w in _WORD_RE.findall(text)]
+def _rank_chunks_semantic(
+    query: str,
+    owner: str,
+    repo: str,
+    chunks: list[chunker.Chunk],
+    top_k: int = 5,
+) -> list[chunker.Chunk]:
+    """Rank chunks by cosine similarity to the query embedding.
 
+    Strategy:
+      1. Try to load a pre-built embedding matrix from the file cache.
+      2. If the cache is stale / missing, regenerate embeddings for all chunks
+         and persist them so subsequent queries are instant.
+      3. Compute query embedding, then dot-product against the matrix
+         (rows are L2-normalised, so dot == cosine similarity).
+    """
+    if not chunks:
+        return []
 
-def _rank_chunks(query: str, chunks: list[chunker.Chunk], top_k: int = 5) -> list[chunker.Chunk]:
-    """Rank *chunks* by TF-IDF similarity to *query*."""
-    query_tokens = _tokenize(query)
-    if not query_tokens:
-        return chunks[:top_k]
+    current_ids = [_chunk_id(c) for c in chunks]
 
-    # Build document frequencies
-    n = len(chunks)
-    doc_freq: Counter[str] = Counter()
-    chunk_tokens: list[list[str]] = []
-    for chunk in chunks:
-        tokens = _tokenize(f"{chunk.title} {chunk.content}")
-        chunk_tokens.append(tokens)
-        unique = set(tokens)
-        for t in unique:
-            doc_freq[t] += 1
+    # Try to load persisted embeddings
+    cached = cache.load_embeddings(owner, repo)
+    if cached is not None:
+        cached_ids, doc_matrix = cached
+        if cached_ids == current_ids:
+            log.debug("Embedding cache hit for %s/%s (%d chunks)", owner, repo, len(chunks))
+        else:
+            # Docs changed since last embed — regenerate
+            log.info("Embedding cache stale for %s/%s, regenerating.", owner, repo)
+            cached = None
 
-    # Score each chunk
-    scored: list[tuple[float, int]] = []
-    for idx, tokens in enumerate(chunk_tokens):
-        tf = Counter(tokens)
-        total = len(tokens) or 1
-        score = 0.0
-        for qt in query_tokens:
-            if qt in tf:
-                tf_val = tf[qt] / total
-                idf_val = math.log((n + 1) / (doc_freq.get(qt, 0) + 1)) + 1
-                score += tf_val * idf_val
-        scored.append((score, idx))
+    if cached is None:
+        log.info("Generating embeddings for %d chunks (%s/%s)…", len(chunks), owner, repo)
+        texts = [f"{c.title}\n{c.content}" for c in chunks]
+        doc_matrix = embedder.embed_texts(texts)  # (N, D) float32, L2-normalised
+        cache.save_embeddings(owner, repo, current_ids, doc_matrix)
+        log.info("Embeddings persisted for %s/%s.", owner, repo)
 
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [chunks[idx] for _, idx in scored[:top_k]]
+    # Embed the query and compute cosine similarities via dot product
+    q_vec = embedder.embed_query(query)  # (D,) unit vector
+    scores: np.ndarray = doc_matrix @ q_vec  # (N,) cosine similarities
+
+    # Pick top-k indices (stable argsort descending)
+    top_indices = int(min(top_k, len(chunks)))
+    ranked_idx = np.argsort(-scores)[:top_indices]
+
+    return [chunks[int(i)] for i in ranked_idx]

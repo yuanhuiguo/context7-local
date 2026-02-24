@@ -8,6 +8,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Semantic Vector Search (P1 Architecture) replacing TF-IDF for highly-relevant documentation retrieval
+- `embedder.py` — Lazy-loading embedding model singleton using `fastembed` (default: `BAAI/bge-small-en-v1.5`)
+- Vector persistence in `cache.py` — Chunks' floating point `.npy` matrices and UUID lookup tables are now cached alongside markdown documents (`save_embeddings()`, `load_embeddings()`)
+- `EMBED_MODEL` environment variable support to customize the embedding model
+- `autouse` mock fixtures in `tests/conftest.py` to prevent real ONNX models from being downloaded during the test suite
+
+### Changed
+
+- `tools.py` — `query-docs` completely replaced TF-IDF string matching ranking with Numpy matrix multiplication (`doc_matrix @ q_vec`) representing cosine similarity
+- `chunker.py` — `Chunk` dataclass extended to hold optional `embedding` L2-normalized `numpy.ndarray`
+- Ranking limit enforced via stable argsort descending
+
+### Dependencies
+
+- Added `fastembed>=0.4.0,<1` — Local embedding generation without external APIs
+- Added `numpy>=2.0,<3` — In-memory L2 vector cosine similarity computations
+
+### Added (Previous)
+
 - Website documentation scraper (`scraper.py`) — async BFS crawler with HTML→Markdown conversion using BeautifulSoup + lxml
 - `fetch_homepage_url()` in `github_client.py` — extracts official docs URL from GitHub repo metadata
 - `_is_docs_url()` filter in `tools.py` — prevents scraping of package registries and source code hosts
@@ -15,11 +34,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Scraped content cached under `web/` namespace (e.g. `web/index.md`, `web/tutorial.md`)
 - 25 new unit tests for scraper module, 2 new integration tests for website-augmented fetch (47 total)
 
-### Changed
+### Changed (Previous)
 
 - `_MAX_PAGE_CHARS` limit increased from 50KB to 200KB to accommodate large splash pages (e.g. FastAPI)
 
-### Dependencies
+### Dependencies (Previous)
 
 - Added `beautifulsoup4>=4.12,<5` — HTML parsing and text extraction
 - Added `lxml>=5.0,<6` — fast HTML parser backend
